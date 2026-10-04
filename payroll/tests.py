@@ -1,10 +1,11 @@
 
 from decimal import Decimal
-
+from urllib import response
+from django.test import TestCase
 from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
 from .services import SalaryStructureService
-
+from .services import SalaryStructureService
 
 class SalaryStructureServiceTests(SimpleTestCase):
 
@@ -257,4 +258,354 @@ class SalaryStructureAPITests(APITestCase):
                 total_components,
                 monthly_ctc
             )
+
+    def test_salary_structure_api_returns_pf_for_6_lpa(self):
+        response = self.client.post(
+            "/api/payroll/salary-structure/generate/",
+            {"lpa": 6},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        pf = response.data["pf"]
+
+        self.assertEqual(pf["pf_wage"], 15000.0)
+        self.assertEqual(pf["employee_pf"], 1800.0)
+        self.assertEqual(pf["employer_pf"], 1800.0)
+        self.assertEqual(pf["eps"], 1249.5)
+
+    def test_salary_structure_api_returns_pf_below_ceiling(self):
+        response = self.client.post(
+            "/api/payroll/salary-structure/generate/",
+            {"lpa": 2.4},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        pf = response.data["pf"]
+
+        self.assertEqual(pf["pf_wage"], 10000.0)
+        self.assertEqual(pf["employee_pf"], 1200.0)
+        self.assertEqual(pf["employer_pf"], 1200.0)
+        self.assertEqual(pf["eps"], 833.0)
+
+    def test_salary_structure_api_returns_esi_for_2_4_lpa(self):
+        response = self.client.post(
+            "/api/payroll/salary-structure/generate/",
+            {"lpa": 2.4},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        esi = response.data["esi"]
+
+        self.assertEqual(esi["esi_wage"], 20000.0)
+        self.assertEqual(esi["employee_esi"], 150.0)
+        self.assertEqual(esi["employer_esi"], 650.0)
+
+    def test_salary_structure_api_esi_not_applicable_above_ceiling(self):
+        response = self.client.post(
+            "/api/payroll/salary-structure/generate/",
+            {"lpa": 6},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        esi = response.data["esi"]
+
+        self.assertEqual(esi["esi_wage"], 0.0)
+        self.assertEqual(esi["employee_esi"], 0.0)
+        self.assertEqual(esi["employer_esi"], 0.0)
+
+    def test_salary_structure_api_returns_tds_for_15_lpa(self):
+        response = self.client.post(
+        "/api/payroll/salary-structure/generate/",
+        {"lpa": 15},
+        format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        tds = response.data["tds"]
+
+        self.assertEqual(tds["annual_income"], 1500000.0)
+        self.assertEqual(tds["standard_deduction"], 75000.0)
+        self.assertEqual(tds["taxable_income"], 1425000.0)
+        self.assertEqual(tds["income_tax"], 93750.0)
+        self.assertEqual(tds["rebate"], 0.0)
+        self.assertEqual(tds["cess"], 3750.0)
+        self.assertEqual(tds["annual_tds"], 97500.0)
+        self.assertEqual(tds["monthly_tds"], 8125.0)
+
+    def test_salary_structure_api_tds_rebate_for_10_lpa(self):
+        response = self.client.post(
+            "/api/payroll/salary-structure/generate/",
+            {"lpa": 10},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        tds = response.data["tds"]
+
+        self.assertEqual(tds["taxable_income"], 925000.0)
+        self.assertEqual(tds["income_tax"], 32500.0)
+        self.assertEqual(tds["rebate"], 32500.0)
+        self.assertEqual(tds["cess"], 0.0)
+        self.assertEqual(tds["annual_tds"], 0.0)
+        self.assertEqual(tds["monthly_tds"], 0.0)
+
+    
+
+
+class PFCalculationTests(TestCase):
+
+    def test_pf_wage_for_basic_below_ceiling(self):
+        basic = Decimal("10000")
+
+        pf_wage = SalaryStructureService.calculate_pf_wage(basic)
+
+        self.assertEqual(pf_wage, Decimal("10000"))
+
+    def test_pf_wage_for_basic_above_ceiling(self):
+        basic = Decimal("25000")
+
+        pf_wage = SalaryStructureService.calculate_pf_wage(basic)
+
+        self.assertEqual(pf_wage, Decimal("15000"))
+
+    def test_employee_pf_for_basic_above_ceiling(self):
+        basic = Decimal("25000")
+
+        employee_pf = SalaryStructureService.calculate_employee_pf(basic)
+
+        self.assertEqual(employee_pf, Decimal("1800.00"))
+
+    def test_employee_pf_for_basic_below_ceiling(self):
+        basic = Decimal("10000")
+
+        employee_pf = SalaryStructureService.calculate_employee_pf(basic)
+
+        self.assertEqual(employee_pf, Decimal("1200.00"))
+
+    def test_employer_pf_for_basic_above_ceiling(self):
+        basic = Decimal("25000")
+
+        employer_pf = SalaryStructureService.calculate_employer_pf(basic)
+
+        self.assertEqual(employer_pf, Decimal("1800.00"))
+
+    def test_eps_for_basic_above_ceiling(self):
+        basic = Decimal("25000")
+
+        eps = SalaryStructureService.calculate_eps(basic)
+
+        self.assertEqual(eps, Decimal("1249.50"))
 # Create your tests here.
+
+class ESICalculationTests(TestCase):
+
+    def test_esi_wage_below_ceiling(self):
+        monthly_wages = Decimal("20000")
+
+        esi_wage = SalaryStructureService.calculate_esi_wage(
+            monthly_wages
+        )
+
+        self.assertEqual(esi_wage, Decimal("20000"))
+
+    def test_esi_wage_at_ceiling(self):
+        monthly_wages = Decimal("21000")
+
+        esi_wage = SalaryStructureService.calculate_esi_wage(
+            monthly_wages
+        )
+
+        self.assertEqual(esi_wage, Decimal("21000"))
+
+    def test_esi_wage_above_ceiling(self):
+        monthly_wages = Decimal("25000")
+
+        esi_wage = SalaryStructureService.calculate_esi_wage(
+            monthly_wages
+        )
+
+        self.assertEqual(esi_wage, Decimal("0.00"))
+
+    def test_employee_esi_below_ceiling(self):
+        monthly_wages = Decimal("20000")
+
+        employee_esi = SalaryStructureService.calculate_employee_esi(
+            monthly_wages
+        )
+
+        self.assertEqual(employee_esi, Decimal("150.00"))
+
+    def test_employer_esi_below_ceiling(self):
+        monthly_wages = Decimal("20000")
+
+        employer_esi = SalaryStructureService.calculate_employer_esi(
+            monthly_wages
+        )
+
+        self.assertEqual(employer_esi, Decimal("650.00"))
+
+    def test_employee_esi_above_ceiling(self):
+        monthly_wages = Decimal("25000")
+
+        employee_esi = SalaryStructureService.calculate_employee_esi(
+            monthly_wages
+        )
+
+        self.assertEqual(employee_esi, Decimal("0.00"))
+
+    def test_employer_esi_above_ceiling(self):
+        monthly_wages = Decimal("25000")
+
+        employer_esi = SalaryStructureService.calculate_employer_esi(
+            monthly_wages
+        )
+
+        self.assertEqual(employer_esi, Decimal("0.00"))
+
+
+class TDSCalculationTests(TestCase):
+
+    def test_taxable_income_after_standard_deduction(self):
+        annual_income = Decimal("1000000")
+
+        taxable_income = (
+            SalaryStructureService.calculate_taxable_income(
+                annual_income
+            )
+        )
+
+        self.assertEqual(
+            taxable_income,
+            Decimal("925000.00")
+        )
+
+    def test_taxable_income_cannot_be_negative(self):
+        annual_income = Decimal("50000")
+
+        taxable_income = (
+            SalaryStructureService.calculate_taxable_income(
+                annual_income
+            )
+        )
+
+        self.assertEqual(
+            taxable_income,
+            Decimal("0.00")
+        )
+
+    def test_income_tax_for_925000(self):
+        taxable_income = Decimal("925000")
+
+        income_tax = (
+            SalaryStructureService.calculate_income_tax(
+                taxable_income
+            )
+        )
+
+        self.assertEqual(
+            income_tax,
+            Decimal("32500.00")
+        )
+
+    def test_rebate_for_income_below_12_lakh(self):
+        taxable_income = Decimal("925000")
+        income_tax = Decimal("32500")
+
+        rebate = SalaryStructureService.calculate_tds_rebate(
+            taxable_income,
+            income_tax
+        )
+
+        self.assertEqual(
+            rebate,
+            Decimal("32500.00")
+        )
+
+    def test_no_rebate_above_12_lakh(self):
+        taxable_income = Decimal("1400000")
+        income_tax = Decimal("150000")
+
+        rebate = SalaryStructureService.calculate_tds_rebate(
+            taxable_income,
+            income_tax
+        )
+
+        self.assertEqual(
+            rebate,
+            Decimal("0.00")
+        )
+
+    def test_tds_for_10_lakh_income(self):
+        result = SalaryStructureService.calculate_tds(
+            Decimal("1000000")
+        )
+
+        self.assertEqual(
+            result["taxable_income"],
+            Decimal("925000.00")
+        )
+
+        self.assertEqual(
+            result["income_tax"],
+            Decimal("32500.00")
+        )
+
+        self.assertEqual(
+            result["rebate"],
+            Decimal("32500.00")
+        )
+
+        self.assertEqual(
+            result["annual_tds"],
+            Decimal("0.00")
+        )
+
+        self.assertEqual(
+            result["monthly_tds"],
+            Decimal("0.00")
+        )
+
+    def test_tds_for_15_lakh_income(self):
+        result = SalaryStructureService.calculate_tds(
+            Decimal("1500000")
+        )
+
+        self.assertEqual(
+            result["taxable_income"],
+            Decimal("1425000.00")
+        )
+
+        self.assertEqual(
+            result["income_tax"],
+            Decimal("93750.00")
+        )
+
+        self.assertEqual(
+            result["rebate"],
+            Decimal("0.00")
+        )
+
+        self.assertEqual(
+            result["cess"],
+            Decimal("3750.00")
+        )
+
+        self.assertEqual(
+            result["annual_tds"],
+            Decimal("97500.00")
+        )
+
+        self.assertEqual(
+            result["monthly_tds"],
+            Decimal("8125.00")
+        )

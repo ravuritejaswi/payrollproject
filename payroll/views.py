@@ -4,6 +4,8 @@ from rest_framework.views import APIView
 
 from .serializers import SalaryStructureRequestSerializer
 from .services import SalaryStructureService
+from .serializers import EmployeePayrollSerializer
+from .models import EmployeePayroll
 
 
 class SalaryStructureGenerateAPIView(APIView):
@@ -39,6 +41,36 @@ class SalaryStructureGenerateAPIView(APIView):
         return Response(
             response_data,
             status=status.HTTP_200_OK
+        )
+
+
+
+
+class EmployeePayrollAPIView(APIView):
+
+    def get(self, request):
+        employees = EmployeePayroll.objects.all().order_by("-created_at")
+        serializer = EmployeePayrollSerializer(
+            employees,
+            many=True
+        )
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = EmployeePayrollSerializer(
+            data=request.data
+        )
+
+        if serializer.is_valid():
+            employee = serializer.save()
+            return Response(
+                EmployeePayrollSerializer(employee).data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
         )
 
 # Create your views here.
