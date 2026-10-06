@@ -6,8 +6,19 @@ from .serializers import SalaryStructureRequestSerializer
 from .services import SalaryStructureService
 from .serializers import EmployeePayrollSerializer
 from .models import EmployeePayroll
+from .history_services import SalaryHistoryService
+from .models import (
+    Employee,
+    EmployeeSalaryHistory,
+    EmployeeChangeHistory,
+)
 
-
+from .serializers import (
+    EmployeeSerializer,
+    EmployeeSalaryHistorySerializer,
+    EmployeeChangeHistorySerializer,
+)
+## Create your views here.
 class SalaryStructureGenerateAPIView(APIView):
 
     def post(self, request):
@@ -45,7 +56,7 @@ class SalaryStructureGenerateAPIView(APIView):
 
 
 
-
+#It handles the API requests for EmployeePayroll model. It allows to get the list of all employees and create a new employee payroll record.
 class EmployeePayrollAPIView(APIView):
 
     def get(self, request):
@@ -73,4 +84,157 @@ class EmployeePayrollAPIView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-# Create your views here.
+
+#It handles the API requests for Employee model. It allows to get the details of a specific employee by their employee_id.
+class EmployeeProfileAPIView(APIView):
+
+    def get(self, request, employee_id):
+        try:
+            employee = Employee.objects.get(
+                employee_id=employee_id
+            )
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = EmployeeSerializer(employee)
+
+        return Response(serializer.data)
+
+#It handles the API requests for EmployeeSalaryHistory model. It allows to get the salary history of a specific employee by their employee_id.
+class EmployeeHistoryAPIView(APIView):
+
+    def get(self, request, employee_id):
+        try:
+            employee = Employee.objects.get(
+                employee_id=employee_id
+            )
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        history = (
+            EmployeeChangeHistory.objects
+            .filter(employee=employee)
+            .order_by("-effective_date")
+        )
+
+        serializer = EmployeeChangeHistorySerializer(
+            history,
+            many=True
+        )
+
+        return Response({
+            "employee_id": employee.employee_id,
+            "history": serializer.data
+        })
+
+#It handles the API requests for EmployeeSalaryHistory model. It allows to get the salary history of a specific employee by their employee_id.
+class SalaryHistoryAPIView(APIView):
+
+    def get(self, request, employee_id):
+        try:
+            employee = Employee.objects.get(
+                employee_id=employee_id
+            )
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        history = (
+            EmployeeSalaryHistory.objects
+            .filter(employee=employee)
+            .order_by("-effective_from")
+        )
+
+        serializer = EmployeeSalaryHistorySerializer(
+            history,
+            many=True
+        )
+
+        return Response({
+            "employee_id": employee.employee_id,
+            "salary_history": serializer.data
+        })
+
+
+
+#It handles the API requests for Employee model. It allows to get the details of a specific employee by their employee_id.
+class EmployeeSalaryUpdateAPIView(APIView):
+
+    def patch(self, request, employee_id):
+        try:
+            employee = Employee.objects.get(
+                employee_id=employee_id
+            )
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_ctc = request.data.get("new_ctc")
+        effective_from = request.data.get(
+            "effective_from"
+        )
+        reason = request.data.get(
+            "reason",
+            ""
+        )
+        changed_by = request.data.get(
+            "changed_by",
+            ""
+        )
+
+        if not new_ctc:
+            return Response(
+                {"detail": "new_ctc is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not effective_from:
+            return Response(
+                {"detail": "effective_from is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            from decimal import Decimal
+            from datetime import date
+
+            new_ctc = Decimal(str(new_ctc))
+            effective_from = date.fromisoformat(
+                effective_from
+            )
+
+            salary = SalaryHistoryService.update_salary(
+                employee=employee,
+                new_ctc=new_ctc,
+                effective_from=effective_from,
+                reason=reason,
+                changed_by=changed_by,
+            )
+
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response(
+            EmployeeSalaryHistorySerializer(
+                salary
+            ).data,
+            status=status.HTTP_200_OK
+        )
+
+
+
+
+

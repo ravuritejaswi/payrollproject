@@ -1,9 +1,15 @@
 from decimal import Decimal
-from .models import EmployeePayroll
 from rest_framework import serializers
 from .services import SalaryStructureService
 
+from .models import (
+    EmployeePayroll,
+    Employee,
+    EmployeeSalaryHistory,
+    EmployeeChangeHistory,
+)
 
+#It validates the data for SalaryStructureRequest model and serializes it to JSON format.
 class SalaryStructureRequestSerializer(serializers.Serializer):
     lpa = serializers.DecimalField(
         required=True,
@@ -19,7 +25,7 @@ class SalaryStructureRequestSerializer(serializers.Serializer):
 
         return value
 
-
+#It validates the data for EmployeePayroll model and serializes it to JSON format.
 class EmployeePayrollSerializer(serializers.ModelSerializer):
     lpa = serializers.DecimalField(
         max_digits=10,
@@ -98,3 +104,72 @@ class EmployeePayrollSerializer(serializers.ModelSerializer):
             annual_tds=tds["annual_tds"],
             monthly_tds=tds["monthly_tds"],
         )
+
+
+#It validates the data for Employee model and serializes it to JSON format. It also validates the data for EmployeeSalaryHistory model and serializes it to JSON format.
+class EmployeeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Employee
+        fields = (
+            "id",
+            "employee_id",
+            "name",
+            "email",
+            "joining_date",
+            "designation",
+            "department",
+            "current_salary",
+            "created_at",
+            "updated_at",
+        )
+
+        read_only_fields = (
+            "id",
+            "current_salary",
+            "created_at",
+            "updated_at",
+        )
+
+#It validates the data for EmployeeSalaryHistory model and serializes it to JSON format.
+class EmployeeSalaryHistorySerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+        model = EmployeeSalaryHistory
+        fields = (
+            "id",
+            "ctc",
+            "effective_from",
+            "effective_to",
+            "reason",
+            "created_at",
+            "created_by",
+        )
+
+
+#It validates the data for EmployeeChangeHistory model and serializes it to JSON format.
+class EmployeeChangeHistorySerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+        model = EmployeeChangeHistory
+        fields = (
+            "id",
+            "field_name",
+            "old_value",
+            "new_value",
+            "effective_date",
+            "changed_at",
+            "changed_by",
+            "change_reason",
+        )
+
+
+
+
+
+
+
