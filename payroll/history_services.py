@@ -1,6 +1,6 @@
 from datetime import timedelta
 from django.db import models, transaction
-
+import uuid
 
 from .models import (
     Employee,
@@ -17,8 +17,16 @@ class SalaryHistoryService:
         new_ctc,
         effective_from,
         reason="",
-        changed_by=""
+        changed_by="",
+        correlation_id=""
     ):
+        # Automatically generate correlation ID
+        # when one is not provided by the caller.
+        if not correlation_id:
+            correlation_id = (
+                f"SALARY-{employee.employee_id}-"
+                f"{uuid.uuid4().hex[:8].upper()}"
+            )
         if new_ctc <= 0:
             raise ValueError(
                 "New CTC must be greater than zero."
@@ -101,6 +109,7 @@ class SalaryHistoryService:
             effective_date=effective_from,
             changed_by=changed_by,
             change_reason=reason,
+            correlation_id=correlation_id,
         )
 
         return new_salary

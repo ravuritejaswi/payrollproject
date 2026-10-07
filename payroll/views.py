@@ -103,6 +103,27 @@ class EmployeeProfileAPIView(APIView):
 
         return Response(serializer.data)
 
+#employee creation api view
+class EmployeeCreateAPIView(APIView):
+
+    def post(self, request):
+        serializer = EmployeeSerializer(
+            data=request.data
+        )
+
+        if serializer.is_valid():
+            employee = serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
 #It handles the API requests for EmployeeSalaryHistory model. It allows to get the salary history of a specific employee by their employee_id.
 class EmployeeHistoryAPIView(APIView):
 
@@ -191,6 +212,10 @@ class EmployeeSalaryUpdateAPIView(APIView):
             "changed_by",
             ""
         )
+        correlation_id = request.data.get(
+            "correlation_id",
+            ""
+        )
 
         if not new_ctc:
             return Response(
@@ -219,6 +244,7 @@ class EmployeeSalaryUpdateAPIView(APIView):
                 effective_from=effective_from,
                 reason=reason,
                 changed_by=changed_by,
+                correlation_id=correlation_id
             )
 
         except ValueError as exc:
@@ -235,6 +261,138 @@ class EmployeeSalaryUpdateAPIView(APIView):
         )
 
 
+#It handles the API requests for EmployeeSalaryHistory model. It allows to get the salary effective on a specific date for a specific employee by their employee_id.
+class EmployeeSalaryEffectiveAPIView(APIView):
+
+    def get(self, request, employee_id):
+        try:
+            employee = Employee.objects.get(
+                employee_id=employee_id
+            )
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        target_date = request.query_params.get("date")
+
+        if not target_date:
+            return Response(
+                {"detail": "date query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            from datetime import date
+
+            target_date = date.fromisoformat(
+                target_date
+            )
+
+        except ValueError:
+            return Response(
+                {
+                    "detail": (
+                        "Invalid date format. "
+                        "Use YYYY-MM-DD."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        salary = SalaryHistoryService.get_salary_for_date(
+            employee=employee,
+            target_date=target_date
+        )
+
+        if not salary:
+            return Response(
+                {
+                    "detail": (
+                        "No salary found for the requested date."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "employee_id": employee.employee_id,
+                "effective_date": target_date,
+                "ctc": salary.ctc,
+                "salary_effective_from": salary.effective_from,
+                "salary_effective_to": salary.effective_to,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+#It handles the API requests for EmployeePayroll model. It allows to get the payroll consumption for a specific employee by their employee_id and a specific payroll date.
+class EmployeePayrollConsumptionAPIView(APIView):
+
+    def get(self, request, employee_id):
+        try:
+            employee = Employee.objects.get(
+                employee_id=employee_id
+            )
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        payroll_date = request.query_params.get(
+            "payroll_date"
+        )
+
+        if not payroll_date:
+            return Response(
+                {
+                    "detail": (
+                        "payroll_date query parameter is required."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            from datetime import date
+
+            payroll_date = date.fromisoformat(
+                payroll_date
+            )
+
+        except ValueError:
+            return Response(
+                {
+                    "detail": (
+                        "Invalid payroll_date format. "
+                        "Use YYYY-MM-DD."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            payroll = (
+                SalaryStructureService
+                .calculate_payroll_for_date(
+                    employee=employee,
+                    payroll_date=payroll_date
+                )
+            )
+
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            payroll,
+            status=status.HTTP_200_OK
+        )
 
 
 

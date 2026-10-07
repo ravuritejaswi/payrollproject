@@ -5,8 +5,11 @@ from django.test import TestCase
 from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
 from .services import SalaryStructureService
-from .services import SalaryStructureService
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
 
+
+#Tests for SalaryStructureService class methods. It tests the calculation of annual CTC, monthly CTC, basic salary, HRA, special allowance, PF, ESI and TDS.
 class SalaryStructureServiceTests(SimpleTestCase):
 
     def test_annual_ctc_for_6_lpa(self):
@@ -103,7 +106,7 @@ class SalaryStructureServiceTests(SimpleTestCase):
             Decimal("12500.00")
         )
 
-
+#tests for SalaryStructureGenerateAPIView class. It tests the API endpoint for generating salary structure based on LPA input. It checks for valid and invalid inputs, and verifies the correctness of the generated salary structure.
 class SalaryStructureAPITests(APITestCase):
 
     url = "/api/payroll/salary-structure/generate/"
@@ -359,9 +362,23 @@ class SalaryStructureAPITests(APITestCase):
         self.assertEqual(tds["annual_tds"], 0.0)
         self.assertEqual(tds["monthly_tds"], 0.0)
 
+    def setUp(self):
+        User = get_user_model()
+
+        self.user = User.objects.create_user(
+            username="admin",
+            password="admin12345"
+        )
+
+        refresh = RefreshToken.for_user(self.user)
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}"
+        )
+
     
 
-
+#tests for PF, ESI and TDS calculation methods in SalaryStructureService class. It tests the calculation of PF wage, employee PF, employer PF, EPS, ESI wage, employee ESI, employer ESI, taxable income, income tax and TDS rebate.
 class PFCalculationTests(TestCase):
 
     def test_pf_wage_for_basic_below_ceiling(self):
@@ -405,8 +422,8 @@ class PFCalculationTests(TestCase):
         eps = SalaryStructureService.calculate_eps(basic)
 
         self.assertEqual(eps, Decimal("1249.50"))
-# Create your tests here.
 
+#tests for ESI calculation methods in SalaryStructureService class. It tests the calculation of ESI wage, employee ESI and employer ESI based on monthly wages and ESI wage ceiling.
 class ESICalculationTests(TestCase):
 
     def test_esi_wage_below_ceiling(self):
@@ -472,7 +489,7 @@ class ESICalculationTests(TestCase):
 
         self.assertEqual(employer_esi, Decimal("0.00"))
 
-
+#tests for TDS calculation methods in SalaryStructureService class. It tests the calculation of taxable income, income tax and TDS rebate based on annual income and standard deduction.
 class TDSCalculationTests(TestCase):
 
     def test_taxable_income_after_standard_deduction(self):
@@ -609,3 +626,5 @@ class TDSCalculationTests(TestCase):
             result["monthly_tds"],
             Decimal("8125.00")
         )
+
+

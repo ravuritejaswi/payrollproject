@@ -165,6 +165,7 @@ class EmployeeChangeHistorySerializer(
             "changed_at",
             "changed_by",
             "change_reason",
+            "correlation_id",
         )
 
 

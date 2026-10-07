@@ -1,5 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
-
+import uuid
+from datetime import timedelta
 from .salary_rules import (
     BASIC_PERCENTAGE,
     HRA_PERCENTAGE_OF_BASIC,
@@ -19,7 +20,7 @@ from .salary_rules import (
 
 
 
-
+#Service class for generating salary structure based on LPA input. It calculates annual CTC, monthly CTC, basic salary, HRA, special allowance, PF, ESI and TDS based on the defined salary rules.
 class SalaryStructureService:
 
     @staticmethod
@@ -336,4 +337,42 @@ class SalaryStructureService:
                 "hra": annual_hra,
                 "special_allowance": annual_special_allowance,
             },
+        }
+
+
+    @staticmethod
+    def calculate_payroll_for_date(employee, payroll_date):
+        from .history_services import SalaryHistoryService
+
+        salary_history = SalaryHistoryService.get_salary_for_date(
+            employee=employee,
+            target_date=payroll_date
+        )
+
+        if not salary_history:
+            raise ValueError(
+                "No salary found for the payroll date."
+            )
+
+        annual_ctc = salary_history.ctc
+
+        lpa = annual_ctc / Decimal("100000")
+
+        salary_structure = (
+            SalaryStructureService.generate_salary_structure(
+                lpa
+            )
+        )
+
+        return {
+            "employee_id": employee.employee_id,
+            "payroll_date": payroll_date,
+            "salary_effective_from": (
+                salary_history.effective_from
+            ),
+            "salary_effective_to": (
+                salary_history.effective_to
+            ),
+            "annual_ctc": annual_ctc,
+            "salary_structure": salary_structure,
         }

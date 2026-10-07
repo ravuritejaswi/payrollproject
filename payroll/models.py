@@ -1,6 +1,7 @@
 from django.db import models
+from django.db.models import Q
 
-
+## Create your models here.
 class EmployeePayroll(models.Model):
     employee_id = models.CharField(
         max_length=50,
@@ -87,11 +88,9 @@ class EmployeePayroll(models.Model):
     def __str__(self):
         return f"{self.employee_id} - {self.employee_name}"
 
-# Create your models here.
 
 
-
-
+#models for Employee, EmployeeSalaryHistory and EmployeeChangeHistory. These models store information about employees, their salary history and changes made to their salary. The Employee model has fields for employee ID, name, email, joining date, designation, department and current salary. The EmployeeSalaryHistory model has fields for employee, CTC, effective from and to dates, reason for change and created by. The EmployeeChangeHistory model has fields for employee, field name, old and new values, effective date, changed at, changed by and change reason.
 class Employee(models.Model):
     employee_id = models.CharField(
         max_length=50,
@@ -136,7 +135,7 @@ class Employee(models.Model):
 
 
 
-
+#models for EmployeeSalaryHistory and EmployeeChangeHistory. These models store information about an employee's salary history and changes made to their salary. The EmployeeSalaryHistory model has fields for employee, CTC, effective from and to dates, reason for change and created by. The EmployeeChangeHistory model has fields for employee, field name, old and new values, effective date, changed at, changed by and change reason.
 class EmployeeSalaryHistory(models.Model):
     employee = models.ForeignKey(
         Employee,
@@ -171,8 +170,14 @@ class EmployeeSalaryHistory(models.Model):
     )
 
     class Meta:
-        ordering = [
-            "-effective_from"
+        ordering = ["-effective_from"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["employee"],
+                condition=Q(effective_to__isnull=True),
+                name="unique_active_salary_per_employee",
+            )
         ]
 
     def __str__(self):
@@ -181,9 +186,6 @@ class EmployeeSalaryHistory(models.Model):
             f"{self.ctc} - "
             f"{self.effective_from}"
         )
-
-
-
 
 class EmployeeChangeHistory(models.Model):
     employee = models.ForeignKey(
@@ -218,6 +220,11 @@ class EmployeeChangeHistory(models.Model):
     change_reason = models.CharField(
         max_length=255,
         blank=True
+    )
+    correlation_id = models.CharField(
+        max_length=100,
+        blank=True,
+        db_index=True
     )
 
     def __str__(self):
