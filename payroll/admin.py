@@ -64,6 +64,7 @@ class EmployeeSalaryHistoryAdmin(admin.ModelAdmin):
         "effective_to",
         "reason",
         "created_by",
+        
     )
 
     search_fields = (
@@ -87,6 +88,7 @@ class EmployeeChangeHistoryAdmin(admin.ModelAdmin):
         "effective_date",
         "changed_at",
         "changed_by",
+        "correlation_id",
     )
 
     search_fields = (

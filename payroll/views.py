@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from decimal import Decimal
 from .serializers import SalaryStructureRequestSerializer
 from .services import SalaryStructureService
 from .serializers import EmployeePayrollSerializer
@@ -212,10 +212,7 @@ class EmployeeSalaryUpdateAPIView(APIView):
             "changed_by",
             ""
         )
-        correlation_id = request.data.get(
-            "correlation_id",
-            ""
-        )
+        
 
         if not new_ctc:
             return Response(
@@ -244,7 +241,7 @@ class EmployeeSalaryUpdateAPIView(APIView):
                 effective_from=effective_from,
                 reason=reason,
                 changed_by=changed_by,
-                correlation_id=correlation_id
+        
             )
 
         except ValueError as exc:
@@ -391,6 +388,155 @@ class EmployeePayrollConsumptionAPIView(APIView):
 
         return Response(
             payroll,
+            status=status.HTTP_200_OK
+        )
+
+#all salary history api view
+class AllSalaryHistoryAPIView(APIView):
+
+    def get(self, request):
+
+        salary_history = (
+            EmployeeSalaryHistory.objects
+            .select_related("employee")
+            .order_by(
+                "employee__employee_id",
+                "-effective_from"
+            )
+        )
+
+        result = {}
+
+        for salary in salary_history:
+
+            employee_id = salary.employee.employee_id
+
+            if employee_id not in result:
+                result[employee_id] = {
+                    "employee_id": employee_id,
+                    "employee_name": salary.employee.name,
+                    "salary_history": []
+                }
+
+            result[employee_id]["salary_history"].append(
+                EmployeeSalaryHistorySerializer(
+                    salary
+                ).data
+            )
+
+        return Response(
+            list(result.values()),
+            status=status.HTTP_200_OK
+        )
+
+#salary history filter api view
+class SalaryHistoryFilterAPIView(APIView):
+
+    def get(self, request):
+
+        salary = request.query_params.get("salary")
+        min_salary = request.query_params.get("min_salary")
+        max_salary = request.query_params.get("max_salary")
+
+        # Validate that at least one filter is provided
+        if not salary and not min_salary and not max_salary:
+            return Response(
+                {
+                    "detail": (
+                        "Provide salary, or min_salary/max_salary."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Exact salary search
+            if salary:
+
+                salary = Decimal(str(salary))
+
+                employees = Employee.objects.filter(
+                    current_salary=salary
+                )
+
+            # Salary range search
+            else:
+
+                if min_salary:
+                    min_salary = Decimal(str(min_salary))
+
+                if max_salary:
+                    max_salary = Decimal(str(max_salary))
+
+                if (
+                    min_salary is not None
+                    and max_salary is not None
+                    and min_salary > max_salary
+                ):
+                    return Response(
+                        {
+                            "detail": (
+                                "min_salary cannot be greater "
+                                "than max_salary."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                employees = Employee.objects.all()
+
+                if min_salary is not None:
+                    employees = employees.filter(
+                        current_salary__gte=min_salary
+                    )
+
+                if max_salary is not None:
+                    employees = employees.filter(
+                        current_salary__lte=max_salary
+                    )
+
+        except (ValueError, TypeError):
+
+            return Response(
+                {
+                    "detail": (
+                        "Salary values must be valid numbers."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        employees = employees.order_by("employee_id")
+
+        response_data = []
+
+        for employee in employees:
+
+            history = (
+                EmployeeSalaryHistory.objects
+                .filter(employee=employee)
+                .order_by("-effective_from")
+            )
+
+            response_data.append(
+                {
+                    "employee_id": employee.employee_id,
+                    "employee_name": employee.name,
+                    "current_salary": employee.current_salary,
+                    "salary_history": (
+                        EmployeeSalaryHistorySerializer(
+                            history,
+                            many=True
+                        ).data
+                    )
+                }
+            )
+
+        return Response(
+            {
+                "count": len(response_data),
+                "employees": response_data
+            },
             status=status.HTTP_200_OK
         )
 

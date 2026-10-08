@@ -1,6 +1,6 @@
 from django.db import models
 from django.db.models import Q
-
+import uuid
 ## Create your models here.
 class EmployeePayroll(models.Model):
     employee_id = models.CharField(
@@ -95,6 +95,12 @@ class Employee(models.Model):
     employee_id = models.CharField(
         max_length=50,
         unique=True
+    )
+    correlation_id = models.UUIDField(
+    default=None,
+    null=True,
+    blank=True,
+    editable=False
     )
 
     name = models.CharField(

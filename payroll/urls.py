@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import EmployeeHistoryAPIView, EmployeePayrollAPIView, EmployeeProfileAPIView, EmployeeSalaryUpdateAPIView, SalaryHistoryAPIView, EmployeeSalaryEffectiveAPIView, EmployeePayrollConsumptionAPIView
+from .views import AllSalaryHistoryAPIView, EmployeeHistoryAPIView, EmployeePayrollAPIView, EmployeeProfileAPIView, EmployeeSalaryUpdateAPIView, SalaryHistoryAPIView, EmployeeSalaryEffectiveAPIView, EmployeePayrollConsumptionAPIView, SalaryHistoryFilterAPIView
 from .views import SalaryStructureGenerateAPIView, EmployeeCreateAPIView
 
 
@@ -50,5 +50,15 @@ urlpatterns = [
     "employees/<str:employee_id>/payroll-consumption/",
     EmployeePayrollConsumptionAPIView.as_view(),
     name="employee-payroll-consumption"
+    ),
+    path(
+    "salary-history/",
+    AllSalaryHistoryAPIView.as_view(),
+    name="all-salary-history"
+    ),
+    path(
+    "salary-history/filter/",
+    SalaryHistoryFilterAPIView.as_view(),
+    name="salary-history-filter"
     ),
 ]
