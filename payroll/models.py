@@ -143,6 +143,15 @@ class Employee(models.Model):
 
 #models for EmployeeSalaryHistory and EmployeeChangeHistory. These models store information about an employee's salary history and changes made to their salary. The EmployeeSalaryHistory model has fields for employee, CTC, effective from and to dates, reason for change and created by. The EmployeeChangeHistory model has fields for employee, field name, old and new values, effective date, changed at, changed by and change reason.
 class EmployeeSalaryHistory(models.Model):
+    
+    idempotency_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False
+    )
+
     employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
@@ -193,6 +202,7 @@ class EmployeeSalaryHistory(models.Model):
             f"{self.effective_from}"
         )
 
+#employee change history model to store the changes made to an employee's salary. This model is used to track the changes made to an employee's salary over time. The employee field is a foreign key to the Employee model, the field_name field is the name of the field that was changed, the old_value field is the old value of the field, the new_value field is the new value of the field, the effective_date field is the date when the change was effective, the changed_at field is the date and time when the change was made, the changed_by field is the name of the person who made the change, and the change_reason field is the reason for the change.
 class EmployeeChangeHistory(models.Model):
     employee = models.ForeignKey(
         Employee,
@@ -239,3 +249,33 @@ class EmployeeChangeHistory(models.Model):
             f"{self.field_name} - "
             f"{self.effective_date}"
         )
+#idempotency record model to store the request and response of an API call. This model is used to ensure that the same request is not processed multiple times. The key field is a unique identifier for the request, the request_hash field is a hash of the request body, the response_status field is the HTTP status code of the response, and the response_body field is the JSON response body. The created_at and updated_at fields are timestamps for when the record was created and last updated.
+class IdempotencyRecord(models.Model):
+    key = models.CharField(
+        max_length=255,
+        unique=True
+    )
+    request_hash = models.CharField(
+        max_length=64
+    )
+    response_status = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True
+    )
+    response_body = models.JSONField(
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.key
+

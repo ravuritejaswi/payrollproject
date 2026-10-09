@@ -17,7 +17,8 @@ class SalaryHistoryService:
         new_ctc,
         effective_from,
         reason="",
-        changed_by=""
+        changed_by="",
+        idempotency_key=""
     
     ):
         if new_ctc <= 0:
@@ -85,6 +86,7 @@ class SalaryHistoryService:
             effective_to=None,
             reason=reason,
             created_by=changed_by,
+            idempotency_key=idempotency_key,
         )
 
         employee.current_salary = new_ctc

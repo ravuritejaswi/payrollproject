@@ -146,6 +146,7 @@ class EmployeeSalaryHistorySerializer(
             "reason",
             "created_at",
             "created_by",
+            "idempotency_key",
         )
 
 

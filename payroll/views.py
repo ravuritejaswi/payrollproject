@@ -1,3 +1,5 @@
+from urllib import request
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -7,6 +9,15 @@ from .services import SalaryStructureService
 from .serializers import EmployeePayrollSerializer
 from .models import EmployeePayroll
 from .history_services import SalaryHistoryService
+import uuid
+import hashlib
+import json
+
+from django.db import IntegrityError, transaction
+from rest_framework.exceptions import APIException
+
+from .models import IdempotencyRecord
+
 from .models import (
     Employee,
     EmployeeSalaryHistory,
@@ -18,7 +29,23 @@ from .serializers import (
     EmployeeSalaryHistorySerializer,
     EmployeeChangeHistorySerializer,
 )
-## Create your views here.
+
+def get_request_hash(data):
+    normalized_data = json.dumps(
+        data,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str
+    )
+
+    return hashlib.sha256(
+        normalized_data.encode("utf-8")
+    ).hexdigest()
+
+#It handles the API requests for generating salary 
+# structure based on the provided LPA (Lakhs Per Annum). 
+# It validates the input LPA, generates the salary structure using the SalaryStructureService, 
+# and returns the calculated salary components along with the input and calculation rules.
 class SalaryStructureGenerateAPIView(APIView):
 
     def post(self, request):
@@ -56,7 +83,7 @@ class SalaryStructureGenerateAPIView(APIView):
 
 
 
-#It handles the API requests for EmployeePayroll model. It allows to get the list of all employees and create a new employee payroll record.
+#It handles the API requests for EmployeePayroll model. It allows to get the list of all employees and create a new employee payroll record''''''
 class EmployeePayrollAPIView(APIView):
 
     def get(self, request):
@@ -189,7 +216,29 @@ class SalaryHistoryAPIView(APIView):
 #It handles the API requests for Employee model. It allows to get the details of a specific employee by their employee_id.
 class EmployeeSalaryUpdateAPIView(APIView):
 
+    
     def patch(self, request, employee_id):
+        
+        idempotency_key = request.headers.get(
+        "Idempotency-Key", ""
+        ).strip()
+
+        if not idempotency_key:
+            idempotency_key = str(uuid.uuid4())
+
+        if len(idempotency_key) > 255:
+            return Response(
+        {
+            "detail": (
+                "Idempotency-Key must not exceed "
+                "255 characters."
+            )
+        },
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+        
+
         try:
             employee = Employee.objects.get(
                 employee_id=employee_id
@@ -201,20 +250,11 @@ class EmployeeSalaryUpdateAPIView(APIView):
             )
 
         new_ctc = request.data.get("new_ctc")
-        effective_from = request.data.get(
-            "effective_from"
-        )
-        reason = request.data.get(
-            "reason",
-            ""
-        )
-        changed_by = request.data.get(
-            "changed_by",
-            ""
-        )
-        
+        effective_from = request.data.get("effective_from")
+        reason = request.data.get("reason", "")
+        changed_by = request.data.get("changed_by", "")
 
-        if not new_ctc:
+        if new_ctc is None or new_ctc == "":
             return Response(
                 {"detail": "new_ctc is required."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -226,36 +266,106 @@ class EmployeeSalaryUpdateAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        request_hash = get_request_hash({
+            "employee_id": employee_id,
+            "data": request.data,
+        })
+
         try:
-            from decimal import Decimal
-            from datetime import date
+            with transaction.atomic():
+                record, created = (
+                    IdempotencyRecord.objects.get_or_create(
+                        key=idempotency_key,
+                        defaults={
+                            "request_hash": request_hash,
+                        },
+                    )
+                )
 
-            new_ctc = Decimal(str(new_ctc))
-            effective_from = date.fromisoformat(
-                effective_from
-            )
+                if not created:
+                    if record.request_hash != request_hash:
+                        return Response(
+                            {
+                                "detail": (
+                                    "This Idempotency-Key has "
+                                    "already been used with "
+                                    "a different request."
+                                )
+                            },
+                            status=status.HTTP_409_CONFLICT
+                        )
 
-            salary = SalaryHistoryService.update_salary(
-                employee=employee,
-                new_ctc=new_ctc,
-                effective_from=effective_from,
-                reason=reason,
-                changed_by=changed_by,
-        
-            )
+                    if record.response_body is None:
+                        return Response(
+                            {
+                                "detail": (
+                                    "This request is still "
+                                    "being processed. Retry shortly."
+                                )
+                            },
+                            status=status.HTTP_409_CONFLICT
+                        )
 
-        except ValueError as exc:
+                    return Response(
+                        record.response_body,
+                        status=record.response_status
+                    )
+
+                try:
+                    new_ctc = Decimal(str(new_ctc))
+
+                    from datetime import date
+                    effective_from = date.fromisoformat(
+                        effective_from
+                    )
+
+                    salary = SalaryHistoryService.update_salary(
+                        employee=employee,
+                        new_ctc=new_ctc,
+                        effective_from=effective_from,
+                        reason=reason,
+                        changed_by=changed_by,
+                        idempotency_key=idempotency_key,
+                    )
+
+
+                except ValueError as exc:
+                    record.delete()
+                    return Response(
+                        {"detail": str(exc)},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                response_body = (
+                    EmployeeSalaryHistorySerializer(salary).data
+                )
+
+                record.response_status = status.HTTP_200_OK
+                record.response_body = dict(response_body)
+                record.save(
+                    update_fields=[
+                        "response_status",
+                        "response_body",
+                        "updated_at",
+                    ]
+                )
+
+                return Response(
+                    record.response_body,
+                    status=record.response_status
+                )
+
+        except IntegrityError:
             return Response(
-                {"detail": str(exc)},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "detail": (
+                        "A concurrent request used this key. "
+                        "Retry using the same Idempotency-Key."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT
             )
 
-        return Response(
-            EmployeeSalaryHistorySerializer(
-                salary
-            ).data,
-            status=status.HTTP_200_OK
-        )
 
 
 #It handles the API requests for EmployeeSalaryHistory model. It allows to get the salary effective on a specific date for a specific employee by their employee_id.
